@@ -23,7 +23,7 @@ local activationFuncs = {
 }
 
 -- Create the XOR network (2 inputs, 2 neurons in hidden layer, 1 output)
-local xor_net = luann:new({2, 2, 1}, 0.1, "xavier")
+local xor_net = luann:new({2, 2, 1}, 0.01, "xavier")
 
 -- Train the network
 for epoch = 1, 170000 do
