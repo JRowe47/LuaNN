@@ -1,56 +1,40 @@
 --[[
-LuaJIT Neural Network Library (LuaNN)
+    LuaNN: A Neural Network Library for Lua and LuaJIT
 
-Overview:
-LuaNN provides a lightweight and efficient neural network implementation in LuaJIT. It's designed for simplicity and speed, leveraging LuaJIT's JIT compilation and FFI capabilities.
+    Overview:
+    LuaNN provides a flexible framework for building and training neural networks in Lua and LuaJIT environments. It features a simple yet powerful API for creating various types of neural network architectures, including support for custom layers, activation functions, and optimization algorithms.
 
+    Features:
+    - Layer abstraction: Define neural network layers with customizable neuron count, weight initialization, and dropout.
+    - Activation functions: Includes common functions like sigmoid, ReLU, and their derivatives.
+    - Weight Initialization: Support for default and Xavier initialization methods.
+    - AdamW Optimization: Incorporates AdamW optimizer for weight updates, including momentum and velocity terms.
+    - Dropout: Implements dropout functionality for regularization during training.
+    - Attention Mechanism: Basic attention layer implementation for enhancing network's focus on relevant input features.
+    - Softmax: Layer-wide softmax function and its derivative for probability distribution outputs.
+    - Batch Processing: Functions for forward and backward propagation with batch inputs.
+    - Backpropagation: Supports backpropagation with L1 and L2 regularization, and batch backpropagation for training.
 
-Features:
-- Efficient JIT Compilation: LuaNN is optimized for LuaJIT's JIT compiler, ensuring fast execution.
-- Weight Initialization Methods: Supports various methods including 'default', 'Xavier', and 'He' initialization for enhanced network stability.
-- Neuron Representation: Employs a detailed representation of neurons, including weighted inputs, biases, and activation functions.
-- Layer Abstraction: Facilitates easy construction of neural networks by managing collections of neurons in layers.
-- Activation Functions: Includes sigmoid, ReLU, tanh, LeakyReLU, ELU, and more, vital for non-linear processing in networks.
-- Derivatives for Backpropagation: Implements derivatives of various activation functions, vital for effective training using backpropagation.
-- SoftMax Functionality: Provides SoftMax and its derivative for categorization tasks in output layers.
-- Advanced Learning Algorithms: Supports various optimization algorithms like AdamW, learning rate scheduling, etc., for efficient training.
-- Attention Mechanism: Includes attention layers to enhance learning from complex data structures, with backpropagation support for these layers.
-- Modular Design: LuaNN's modular structure allows for easy customization and expansion.
+    Usage:
+    1. Initialize the network with desired layer sizes, learning rate, weight initialization method, and regularization parameters.
+    2. Set input signals or batch inputs.
+    3. Propagate signals through the network using specified activation functions.
+    4. Apply backpropagation to train the network with given inputs and target outputs.
 
-Example Usage:
-1. Network Creation:
-   -- Initialize a neural network with 784 input neurons, 100 neurons in the hidden layer, and 10 output neurons.
-   -- The learning rate is set to 0.01 and the Xavier weight initialization method is used.
-   local myNetwork = luann:new({784, 100, 10}, 0.01, 'xavier')
+    Example:
+    ```
+    local nn = luann:new({64, 128, 64, 10}, 0.001, 'xavier', 0.01, 0.01, {0.2, 0.5, 0.2, 0})
+    local inputs = {0.5, 0.1, -0.3, ...}  -- Example input array
+    local outputs = nn:activate(inputs, {'relu', 'relu', 'sigmoid', 'softmax'})
+    ```
 
-2. Input Setting:
-   -- Assuming 'inputData' is a table representing your input data (e.g., image pixel values).
-   myNetwork:setInputSignals(inputData)
+    Note:
+    This library is designed for use in Lua and LuaJIT environments. Performance optimizations specific to LuaJIT may be applied for enhanced efficiency in computationally intensive operations.
 
-3. Activation Function Assignment:
-   -- Assign 'relu' for the hidden layer and 'softmax' for the output layer.
-   local activationFunctions = {
-       { 'relu' },     -- First hidden layer
-       { 'softmax' }   -- Output layer
-   }
-
-4. Training the Network:
-   -- 'inputData' is the input data, and 'targetOutputs' are the desired outputs for training.
-   myNetwork:backpropagate(inputData, targetOutputs, activationFunctions)
-
-5. Making Predictions:
-   -- Pass new input data to the network to get predictions.
-   local predictions = myNetwork:activate(newInputData, activationFunctions)
-
-Note: 'inputData', 'targetOutputs', and 'newInputData' are placeholders.
-
-This example outlines learning rate scheduling:
-    -- Adjust learning rate based on your scheduling strategy
-    if epoch % 10 == 0 then  -- Example: Reduce learning rate every 10 epochs
-        network:updateLearningRate(network.learningRate * 0.9)
-    end
-
---]]
+    Author: JRowe47
+    Version: 1.0
+    License: MIT
+]]
 
 local luann = {}
 local Layer = {}
