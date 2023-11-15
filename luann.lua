@@ -4,16 +4,18 @@ LuaJIT Neural Network Library (LuaNN)
 Overview:
 LuaNN provides a lightweight and efficient neural network implementation in LuaJIT. It's designed for simplicity and speed, leveraging LuaJIT's JIT compilation and FFI capabilities.
 
+
 Features:
-- Weight Initialization Methods: Includes 'default' random initialization and 'Xavier' initialization for improved training stability.
-- Neuron Representation (Cell): Models individual neurons, handling weighted input sum calculation.
-- Layer Abstraction: Manages a collection of neurons, simplifying network construction.
-- Activation Functions: Supports common functions like sigmoid, ReLU, and tanh, essential for non-linear transformations in neural networks.
-- Derivatives for Backpropagation: Implements derivatives of activation functions, crucial for the backpropagation training algorithm.
-- SoftMax Functionality: Provides SoftMax and its derivative for output layers, useful in classification tasks.
-- Attention Mechanism: Implements attention layers that can focus on specific parts of the input, enhancing the model's ability to learn from complex data structures.
-- Attention Backpropagation: Supports the backpropagation process through attention layers, optimizing attention weights based on training data.
-- Neural Network Construction (luann): Facilitates creating, training, and using neural networks, encapsulating the entire workflow.
+- Efficient JIT Compilation: LuaNN is optimized for LuaJIT's JIT compiler, ensuring fast execution.
+- Weight Initialization Methods: Supports various methods including 'default', 'Xavier', and 'He' initialization for enhanced network stability.
+- Neuron Representation: Employs a detailed representation of neurons, including weighted inputs, biases, and activation functions.
+- Layer Abstraction: Facilitates easy construction of neural networks by managing collections of neurons in layers.
+- Activation Functions: Includes sigmoid, ReLU, tanh, LeakyReLU, ELU, and more, vital for non-linear processing in networks.
+- Derivatives for Backpropagation: Implements derivatives of various activation functions, vital for effective training using backpropagation.
+- SoftMax Functionality: Provides SoftMax and its derivative for categorization tasks in output layers.
+- Advanced Learning Algorithms: Supports various optimization algorithms like AdamW, learning rate scheduling, etc., for efficient training.
+- Attention Mechanism: Includes attention layers to enhance learning from complex data structures, with backpropagation support for these layers.
+- Modular Design: LuaNN's modular structure allows for easy customization and expansion.
 
 Example Usage:
 1. Network Creation:
