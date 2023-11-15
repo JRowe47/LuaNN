@@ -71,9 +71,20 @@ local weightInits = {
 -- Cell object for individual neurons
 function Cell:new(numInputs, weightInitMethod, numOutputs)
     -- Initialize cell with weights, delta (error term), and signal (output)
-    local cell = {delta = 0, weights = {}, signal = 0}
+    local cell = {
+      delta = 0, 
+      weights = {}, 
+      signal = 0,
+      m = {},  -- Momentum for AdamW
+      v = {},  -- Velocity for AdamW
+      timestep = 0  -- Timestep for AdamW
+      }
     local initMethod = weightInits[weightInitMethod] or weightInits.default
     -- Initialize each weight using the selected weight initialization method
+    for i = 1, numInputs do
+        cell.m[i] = 0
+        cell.v[i] = 0
+    end
     for i = 1, numInputs do
         cell.weights[i] = initMethod(numInputs, numOutputs)
     end
@@ -283,23 +294,27 @@ function luann:activate(inputs, activationFuncs)
 end
 
 -- Backpropagation training algorithm with L1 and L2 regularization
-function luann:backpropagate(inputs, targetOutputs, activationFuncs)
+function luann:backpropagate(inputs, targetOutputs, activationFuncs, adamParams)
+    -- AdamW parameters
+    local beta1 = adamParams.beta1 or 0.9
+    local beta2 = adamParams.beta2 or 0.999
+    local epsilon = adamParams.epsilon or 1e-8
+    local weightDecay = adamParams.weightDecay or 0
+
     self:activate(inputs, activationFuncs)
 
     for i = #self.layers, 2, -1 do
         local layer = self.layers[i]
         local prevLayerSignals = self:getSignals(self.layers[i-1])
         local activationFuncName = activationFuncs[i - 1][1]
-        local isSoftMaxLayer = activationFuncs[i - 1] == 'softmax'
+        local isSoftMaxLayer = activationFuncName == 'softmax'
 
         for j, cell in ipairs(layer.cells) do
+            cell.timestep = cell.timestep + 1
+
             local errorTerm
             if i == #self.layers then
-                if isSoftMaxLayer then
-                    errorTerm = cell.signal - targetOutputs[j]
-                else
-                    errorTerm = targetOutputs[j] - cell.signal
-                end
+                errorTerm = isSoftMaxLayer and (cell.signal - targetOutputs[j]) or (targetOutputs[j] - cell.signal)
             else
                 errorTerm = 0
                 for k, nextCell in ipairs(self.layers[i+1].cells) do
@@ -307,28 +322,44 @@ function luann:backpropagate(inputs, targetOutputs, activationFuncs)
                 end
             end
 
-            local derivative
-            if isSoftMaxLayer then
-                derivative = (j == targetOutputs and cell.signal - 1) or cell.signal
-            else
-                local derivativeFunc = activationDerivatives[activationFuncName]
-                if not derivativeFunc then
-                    error("Derivative function for '" .. tostring(activationFuncName) .. "' does not exist")
-                end
-                derivative = derivativeFunc(cell.signal, table.unpack(activationFuncs[i - 1], 2))
+            local derivativeFunc = isSoftMaxLayer and function(x) return x end or activationDerivatives[activationFuncName]
+            if not derivativeFunc then
+                error("Derivative function for '" .. tostring(activationFuncName) .. "' does not exist")
             end
+            cell.delta = errorTerm * derivativeFunc(cell.signal, table.unpack(activationFuncs[i - 1], 2))
 
-            cell.delta = errorTerm * derivative
-
+            -- AdamW weight and bias updates
             for k, inputSignal in ipairs(prevLayerSignals) do
-                  -- Update weights with L1 and L2 regularization
-              local weight = cell.weights[k]
-              local l1Reg = (self.l1Lambda * (weight > 0 and 1 or -1))
-              local l2Reg = (self.l2Lambda * weight)
-              cell.weights[k] = weight - (self.learningRate * l1Reg) - (self.learningRate * l2Reg) + (self.learningRate * cell.delta * inputSignal)
+                local grad = cell.delta * inputSignal
+
+                -- Momentum and velocity updates
+                cell.m[k] = beta1 * cell.m[k] + (1 - beta1) * grad
+                cell.v[k] = beta2 * cell.v[k] + (1 - beta2) * grad * grad
+
+                -- Bias-corrected estimates
+                local mHat = cell.m[k] / (1 - beta1 ^ cell.timestep)
+                local vHat = cell.v[k] / (1 - beta2 ^ cell.timestep)
+
+                -- L1 and L2 regularization
+                local l1Reg = self.l1Lambda * (cell.weights[k] > 0 and 1 or -1)
+                local l2Reg = self.l2Lambda * cell.weights[k]
+
+                -- Weight update with AdamW, L1, and L2
+                cell.weights[k] = cell.weights[k] * (1 - weightDecay) - (self.learningRate * mHat) / (math.sqrt(vHat) + epsilon) - (self.learningRate * l1Reg) - (self.learningRate * l2Reg)
             end
-        layer.biases[j] = layer.biases[j] + self.learningRate * cell.delta
+
+            -- Bias update (if you have separate biases)
+            local biasGrad = cell.delta
+            cell.m.bias = beta1 * cell.m.bias + (1 - beta1) * biasGrad
+            cell.v.bias = beta2 * cell.v.bias + (1 - beta2) * biasGrad * biasGrad
+
+            local mHatBias = cell.m.bias / (1 - beta1 ^ cell.timestep)
+            local vHatBias = cell.v.bias / (1 - beta2 ^ cell.timestep)
+
+            layer.biases[j] = layer.biases[j] * (1 - weightDecay) - (self.learningRate * mHatBias) / (math.sqrt(vHatBias) + epsilon)
+        end
     end
 end
+
 
 return luann
