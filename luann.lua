@@ -41,7 +41,12 @@ Example Usage:
    local predictions = myNetwork:activate(newInputData, activationFunctions)
 
 Note: 'inputData', 'targetOutputs', and 'newInputData' are placeholders.
-This example outlines the basic steps for network creation, training, and prediction.
+
+This example outlines learning rate scheduling:
+    -- Adjust learning rate based on your scheduling strategy
+    if epoch % 10 == 0 then  -- Example: Reduce learning rate every 10 epochs
+        network:updateLearningRate(network.learningRate * 0.9)
+    end
 
 --]]
 
@@ -216,9 +221,9 @@ function Layer:attentionBackPropagation(inputs, targetOutputs, attentionSize, le
 end
 
 
--- Initialize the neural network with given layer sizes, learning rate, and weight initialization method
-function luann:new(layers, learningRate, weightInitMethod)
-    local network = {learningRate = learningRate, layers = {}}
+-- Initialize the neural network with given layer sizes, learning rate, weight initialization method, and regularization parameters
+function luann:new(layers, learningRate, weightInitMethod, l1Lambda, l2Lambda)
+    local network = {learningRate = learningRate, layers = {}, l1Lambda = l1Lambda or 0, l2Lambda = l2Lambda or 0}
     network.layers[1] = Layer:new(layers[1], layers[1], weightInitMethod)
     for i = 2, #layers do
         network.layers[i] = Layer:new(layers[i], layers[i-1], weightInitMethod)
@@ -232,6 +237,11 @@ function luann:setInputSignals(inputs)
     for i = 1, #inputs do
         self.layers[1].cells[i].signal = inputs[i]
     end
+end
+
+-- Function to update the learning rate
+function luann:updateLearningRate(newLearningRate)
+    self.learningRate = newLearningRate
 end
 
 -- Forward propagation of signals through the network
@@ -272,7 +282,7 @@ function luann:activate(inputs, activationFuncs)
     return self:getSignals(self.layers[#self.layers])
 end
 
--- Backpropagation training algorithm
+-- Backpropagation training algorithm with L1 and L2 regularization
 function luann:backpropagate(inputs, targetOutputs, activationFuncs)
     self:activate(inputs, activationFuncs)
 
@@ -280,17 +290,14 @@ function luann:backpropagate(inputs, targetOutputs, activationFuncs)
         local layer = self.layers[i]
         local prevLayerSignals = self:getSignals(self.layers[i-1])
         local activationFuncName = activationFuncs[i - 1][1]
-        -- Check if current layer uses SoftMax
         local isSoftMaxLayer = activationFuncs[i - 1] == 'softmax'
 
         for j, cell in ipairs(layer.cells) do
             local errorTerm
             if i == #self.layers then
                 if isSoftMaxLayer then
-                    -- SoftMax-specific error calculation
                     errorTerm = cell.signal - targetOutputs[j]
                 else
-                    -- Standard error calculation for other activation functions
                     errorTerm = targetOutputs[j] - cell.signal
                 end
             else
@@ -302,25 +309,25 @@ function luann:backpropagate(inputs, targetOutputs, activationFuncs)
 
             local derivative
             if isSoftMaxLayer then
-                -- SoftMax derivative is simply the signal for the correct class minus 1
                 derivative = (j == targetOutputs and cell.signal - 1) or cell.signal
             else
-                -- Derivative for other activation functions
                 local derivativeFunc = activationDerivatives[activationFuncName]
                 if not derivativeFunc then
                     error("Derivative function for '" .. tostring(activationFuncName) .. "' does not exist")
                 end
                 derivative = derivativeFunc(cell.signal, table.unpack(activationFuncs[i - 1], 2))
-                --derivative = derivativeFunc(cell.signal)
             end
 
             cell.delta = errorTerm * derivative
 
             for k, inputSignal in ipairs(prevLayerSignals) do
-                cell.weights[k] = cell.weights[k] + self.learningRate * cell.delta * inputSignal
+                  -- Update weights with L1 and L2 regularization
+              local weight = cell.weights[k]
+              local l1Reg = (self.l1Lambda * (weight > 0 and 1 or -1))
+              local l2Reg = (self.l2Lambda * weight)
+              cell.weights[k] = weight - (self.learningRate * l1Reg) - (self.learningRate * l2Reg) + (self.learningRate * cell.delta * inputSignal)
             end
-            layer.biases[j] = layer.biases[j] + self.learningRate * cell.delta
-        end
+        layer.biases[j] = layer.biases[j] + self.learningRate * cell.delta
     end
 end
 
