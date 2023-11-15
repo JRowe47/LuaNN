@@ -7,7 +7,7 @@ LuaNN provides a lightweight and efficient neural network implementation in LuaJ
 
 Features:
 - Efficient JIT Compilation: LuaNN is optimized for LuaJIT's JIT compiler, ensuring fast execution.
-- Weight Initialization Methods: Supports various methods including 'default', 'Xavier', and 'He' initialization for enhanced network stability.
+- Weight Initialization Methods: Supports various methods including 'default'and 'Xavier' initialization for enhanced network stability.
 - Neuron Representation: Employs a detailed representation of neurons, including weighted inputs, biases, and activation functions.
 - Layer Abstraction: Facilitates easy construction of neural networks by managing collections of neurons in layers.
 - Activation Functions: Includes sigmoid, ReLU, tanh, LeakyReLU, ELU, and more, vital for non-linear processing in networks.
