@@ -2,12 +2,12 @@
 LuaJIT Neural Network Library (LuaNN)
 
 Overview:
-LuaNN provides a lightweight and efficient neural network implementation in Lua/LuaJIT. It's designed for simplicity and speed.
+LuaNN provides a lightweight and efficient neural network implementation in LuaJIT. It's designed for simplicity and speed, leveraging LuaJIT's JIT compilation and FFI capabilities.
 
 
 Features:
 - Efficient JIT Compilation: LuaNN is optimized for LuaJIT's JIT compiler, ensuring fast execution.
-- Weight Initialization Methods: Supports various methods including 'default'and 'Xavier' initialization for enhanced network stability.
+- Weight Initialization Methods: Supports various methods including 'default', 'Xavier', and 'He' initialization for enhanced network stability.
 - Neuron Representation: Employs a detailed representation of neurons, including weighted inputs, biases, and activation functions.
 - Layer Abstraction: Facilitates easy construction of neural networks by managing collections of neurons in layers.
 - Activation Functions: Includes sigmoid, ReLU, tanh, LeakyReLU, ELU, and more, vital for non-linear processing in networks.
@@ -106,8 +106,9 @@ function Cell:weightedSum(inputs, bias)
 end
 
 -- Layer object, representing a layer of cells (neurons)
-function Layer:new(numCells, numInputs, weightInitMethod)
+function Layer:new(numCells, numInputs, weightInitMethod, dropoutRate)
     local cells, biases = {}, {}
+    self.dropoutRate = dropoutRate or 0  -- Default dropout rate is 0 (no dropout)
     -- Initialize each cell and bias in the layer
     for i = 1, numCells do
         cells[i] = Cell:new(numInputs, weightInitMethod, numCells)
@@ -118,6 +119,18 @@ function Layer:new(numCells, numInputs, weightInitMethod)
     self.__index = self
     return layer
 end
+
+-- Layer dropout functionality
+function Layer:applyDropout(isTraining)
+    if isTraining and self.dropoutRate > 0 then
+        for _, cell in ipairs(self.cells) do
+            if math.random() < self.dropoutRate then
+                cell.signal = 0  -- Dropping out the neuron
+            end
+        end
+    end
+end
+
 
 -- Attention layer
 function Layer:attention(inputs, attentionSize)
@@ -207,6 +220,21 @@ function Layer:softmaxDerivative(outputIndex)
     return derivatives
 end
 
+-- Modify the Layer class to handle batches of inputs
+function Layer:forwardBatch(batchInputs)
+    -- batchInputs is a matrix where each row is an input instance
+    -- Initialize a matrix to store the outputs for each input instance
+    local batchOutputs = {}
+    for i = 1, #batchInputs do
+        local outputs = {}
+        for j, cell in ipairs(self.cells) do
+            outputs[j] = cell:weightedSum(batchInputs[i], self.biases[j])
+        end
+        batchOutputs[i] = outputs
+    end
+    return batchOutputs
+end
+
 function Layer:attentionBackPropagation(inputs, targetOutputs, attentionSize, learningRate)
     local attentionWeightsGradient = {}
     local attentionBiasesGradient = {}
@@ -235,16 +263,17 @@ end
 
 
 -- Initialize the neural network with given layer sizes, learning rate, weight initialization method, and regularization parameters
-function luann:new(layers, learningRate, weightInitMethod, l1Lambda, l2Lambda)
+function luann:new(layers, learningRate, weightInitMethod, l1Lambda, l2Lambda, dropoutRates)
     local network = {learningRate = learningRate, layers = {}, l1Lambda = l1Lambda or 0, l2Lambda = l2Lambda or 0}
-    network.layers[1] = Layer:new(layers[1], layers[1], weightInitMethod)
+    network.layers[1] = Layer:new(layers[1], layers[1], weightInitMethod, dropoutRates[1])
     for i = 2, #layers do
-        network.layers[i] = Layer:new(layers[i], layers[i-1], weightInitMethod)
+        network.layers[i] = Layer:new(layers[i], layers[i-1], weightInitMethod, dropoutRates[i])
     end
     setmetatable(network, self)
     self.__index = self
     return network
 end
+
 
 function luann:setInputSignals(inputs)
     for i = 1, #inputs do
@@ -289,10 +318,37 @@ function luann:getSignals(layer)
 end
 
 -- Main activation function (refactored)
-function luann:activate(inputs, activationFuncs)
+function luann:activate(inputs, activationFuncs, isTraining)
     self:setInputSignals(inputs)
     self:propagateSignals(activationFuncs)
+    -- Apply dropout if in training mode
+    if isTraining then
+        for _, layer in ipairs(self.layers) do
+            layer:applyDropout(isTraining)
+        end
+    end
     return self:getSignals(self.layers[#self.layers])
+end
+
+-- Modify the luann class to handle batches of inputs
+function luann:activateBatch(batchInputs, activationFuncs, isTraining)
+    local currentBatch = batchInputs
+    for i = 1, #self.layers do
+        local layerOutputs = self.layers[i]:forwardBatch(currentBatch)
+        -- Apply activation functions to each output in the batch
+        for j = 1, #layerOutputs do
+            local activationFunc = activations[activationFuncs[i][1]]
+            for k = 1, #layerOutputs[j] do
+                layerOutputs[j][k] = activationFunc(layerOutputs[j][k])
+            end
+        end
+        currentBatch = layerOutputs
+        -- Apply dropout if in training mode
+        if isTraining then
+            self.layers[i]:applyDropout(isTraining)
+        end
+    end
+    return currentBatch
 end
 
 -- Backpropagation training algorithm with L1 and L2 regularization
@@ -363,5 +419,69 @@ function luann:backpropagate(inputs, targetOutputs, activationFuncs, adamParams)
     end
 end
 
+function luann:batchBackpropagate(batchInputs, batchTargetOutputs, activationFuncs, adamParams)
+    local batchSize = #batchInputs
+
+    -- Initialize gradients accumulation for each layer
+    local layerGradients = {}
+    for i, layer in ipairs(self.layers) do
+        layerGradients[i] = {
+            weights = {},
+            biases = {}
+        }
+        for j, cell in ipairs(layer.cells) do
+            layerGradients[i].weights[j] = {}
+            for k = 1, #cell.weights do
+                layerGradients[i].weights[j][k] = 0
+            end
+            layerGradients[i].biases[j] = 0
+        end
+    end
+
+    -- Process each instance in the batch
+    for b = 1, batchSize do
+        self:activate(batchInputs[b], activationFuncs)  -- Forward pass
+
+        -- Backward pass for each layer
+        for i = #self.layers, 1, -1 do
+            local layer = self.layers[i]
+            local prevLayerSignals = self:getSignals(self.layers[i-1])
+            local activationFuncName = activationFuncs[i][1]
+            local isSoftMaxLayer = activationFuncName == 'softmax'
+
+            for j, cell in ipairs(layer.cells) do
+                -- Compute error term (delta)
+                local errorTerm
+                if i == #self.layers then
+                    errorTerm = isSoftMaxLayer and (cell.signal - batchTargetOutputs[b][j]) or (batchTargetOutputs[b][j] - cell.signal)
+                else
+                    errorTerm = 0
+                    for k, nextCell in ipairs(self.layers[i+1].cells) do
+                        errorTerm = errorTerm + nextCell.delta * nextCell.weights[j]
+                    end
+                end
+
+                local derivativeFunc = isSoftMaxLayer and function(x) return x end or activationDerivatives[activationFuncName]
+                cell.delta = errorTerm * derivativeFunc(cell.signal)
+
+                -- Accumulate gradients for weights and biases
+                for k, inputSignal in ipairs(prevLayerSignals) do
+                    layerGradients[i].weights[j][k] = layerGradients[i].weights[j][k] + cell.delta * inputSignal
+                end
+                layerGradients[i].biases[j] = layerGradients[i].biases[j] + cell.delta
+            end
+        end
+    end
+
+    -- Update weights and biases using the average gradients
+    for i, layer in ipairs(self.layers) do
+        for j, cell in ipairs(layer.cells) do
+            for k, weight in ipairs(cell.weights) do
+                cell.weights[k] = weight - self.learningRate * (layerGradients[i].weights[j][k] / batchSize)
+            end
+            layer.biases[j] = layer.biases[j] - self.learningRate * (layerGradients[i].biases[j] / batchSize)
+        end
+    end
+end
 
 return luann
