@@ -2,7 +2,7 @@
 LuaJIT Neural Network Library (LuaNN)
 
 Overview:
-LuaNN provides a lightweight and efficient neural network implementation in LuaJIT. It's designed for simplicity and speed, leveraging LuaJIT's JIT compilation and FFI capabilities.
+LuaNN provides a lightweight and efficient neural network implementation in Lua/LuaJIT. It's designed for simplicity and speed.
 
 
 Features:
