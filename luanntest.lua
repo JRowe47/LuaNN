@@ -1,53 +1,49 @@
--- Require the luann library
-local luann = require 'luannUpdated'
+-- Assuming the neural network library is already included with the name 'luann'
+local luann = require 'luann'
 
--- Seed the random number generator
-math.randomseed(os.time())
-
--- Function to print table (for displaying outputs)
-local function printTable(t)
-    for i, v in ipairs(t) do
-        io.write(string.format("%.5f ", v))
-    end
-    io.write("\n")
-end
-
--- XOR input and output pairs
-local xor_inputs = {{0, 0}, {0, 1}, {1, 0}, {1, 1}}
-local xor_outputs = {{0}, {1}, {1}, {0}}
-
--- Activation functions for each layer (assuming two layers)
-local activationFuncs = {
-    {"swish", 0.5},  -- for the first hidden layer
-    {"swish", 0.5}   -- for the output layer
+-- Configuration for the neural network
+local config = {
+    learningRate = 0.01,
+    weightInitMethod = 'xavier',
+    layers = {
+        3,  -- 3 neurons in the input layer
+        {numCells = 5, weightInitMethod = 'xavier'},  -- 5 neurons in the hidden layer
+        {numCells = 2, weightInitMethod = 'xavier'}   -- 2 neurons in the output layer (for softmax)
+    },
+    dropoutRates = {0, 0.2}  -- Using dropout in the hidden layer
 }
 
--- Create the XOR network (2 inputs, 2 neurons in hidden layer, 1 output)
-local xor_net = luann:new({2, 2, 1}, 0.01, "xavier")
+-- Create the neural network
+local network = luann:new(config)
 
--- Train the network
-for epoch = 1, 170000 do
-    for i = 1, #xor_inputs do
-        xor_net:backpropagate(xor_inputs[i], xor_outputs[i], activationFuncs)
-    end
+-- Dummy dataset
+local inputs = {
+    {0.1, 0.2, 0.7},
+    {0.3, 0.4, 0.3},
+    {0.6, 0.2, 0.2}
+}
 
-    -- Optional: Log outputs at certain epochs for debugging
-    if epoch % 10000 == 0 then
-        print("Epoch: " .. epoch)
-        for i = 1, #xor_inputs do
-            local outputs = xor_net:activate(xor_inputs[i], activationFuncs)
-            print("Input: ", xor_inputs[i][1], xor_inputs[i][2])
-            print("Output: ")
-            printTable(outputs)
-        end
+local targets = {
+    {1, 0},  -- First class
+    {0, 1},  -- Second class
+    {1, 0}   -- First class
+}
+
+-- Activation functions for each layer
+local activationFuncs = {
+    {"leakyRelu", 0.01},  -- LeakyReLU for hidden layer
+    {"softmax"}           -- Softmax for output layer
+}
+
+-- Training loop
+for epoch = 1, 1000 do
+    for i, input in ipairs(inputs) do
+        network:backpropagate(input, targets[i], activationFuncs, {0.9, 0.999})
     end
 end
 
--- Test the network
-print("XOR Network Outputs after training:")
-for i = 1, #xor_inputs do
-    local outputs = xor_net:activate(xor_inputs[i], activationFuncs)
-    print("Input: ", xor_inputs[i][1], xor_inputs[i][2])
-    print("Output: ")
-    printTable(outputs)
+-- Testing the network
+for _, input in ipairs(inputs) do
+    local output = network:activate(input, activationFuncs, false)
+    print(table.concat(output, ", "))
 end
